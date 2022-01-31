@@ -1,6 +1,7 @@
 mod types;
 use std::sync::Arc;
 
+use rand::{thread_rng, Rng};
 use types::*;
 
 const INFINITY: f64 = f64::INFINITY;
@@ -31,71 +32,57 @@ fn ray_color(r: Ray, world: &dyn Hittable) -> Color {
     } else {
         let unit_direction = r.direction.unit_vector();
         let t = 0.5 * (unit_direction.y + 1.0);
-        Color::new(1.0, 1.0, 1.0) * (1.0 - t) + Color::new(0.5, 0.7, 1.0) * t
+        Color::one() * (1.0 - t) + Color::new(0.5, 0.7, 1.0) * t
     }
 }
 
-fn write_color(color: Color) {
+fn write_color(color: Color, samples_per_pixel: i64) {
+    let scale = 1.0 / samples_per_pixel as f64;
+    
+    let r = color.x * scale;
+    let g = color.y * scale;
+    let b = color.z * scale;
+
     print!(
-        "{} {} {}\n", 
-        (255.999 * color.x) as i64,
-        (255.999 * color.y) as i64,
-        (255.999 * color.z) as i64
+        "{} {} {}\n",
+        (256.0 * r.clamp(0.0, 0.999)) as i64,
+        (256.0 * g.clamp(0.0, 0.999)) as i64,
+        (256.0 * b.clamp(0.0, 0.999)) as i64
     );
 }
 
 const ASPECT_RATIO: f64 = 16.0 / 9.0;
 const IMAGE_WIDTH: u16 = 400;
 const IMAGE_HEIGHT: u16 = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as u16;
+const SAMPLES_PER_PIXEL: i64 = 100;
 
 fn render_test_image() {
-
-    // Image
-    let viewport_height = 2.0;
-    let viewport_width = ASPECT_RATIO * viewport_height;
-    let focal_length = 1.0;
-
     // World
     let mut world = HittableList::new();
-    world.add(
-        Arc::new(
-            Sphere::new(
-                Point3::new(0.0, 0.0, -1.0),
-                0.5
-            )
-        )
-    );
-    world.add(
-        Arc::new(
-            Sphere::new(
-                Point3::new(0.0, -100.5, -1.0),
-                100.0
-            )
-        )
-    );
+    world.add(Arc::new(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5)));
+    world.add(Arc::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0)));
 
     // Camera
-    let origin = Point3 { x:0.0, y:0.0, z:0.0 };
-    let horizontal = Vec3 { x:viewport_width, y:0.0, z:0.0 };
-    let vertical = Vec3 { x:0.0, y:viewport_height, z:0.0 };
-    let lower_left_corner = origin - horizontal / 2.0 - vertical / 2.0 - Vec3 { x:0.0, y: 0.0, z:focal_length };
+    let camera = Camera::default_camera();
 
     print!("P3\n{IMAGE_WIDTH} {IMAGE_HEIGHT}\n255\n");
-    
+
+    let mut rng = thread_rng();
+
     for j in (0..IMAGE_HEIGHT).rev() {
         eprint!("\rScanlines remaining: {j}      ");
         for i in 0..IMAGE_WIDTH {
-            let u = i as f64 / (IMAGE_WIDTH-1) as f64;
-            let v = j as f64 / (IMAGE_HEIGHT-1) as f64;
-            let ray = Ray {
-                origin: origin,
-                direction: lower_left_corner + horizontal * u + vertical * v - origin,
-            };
-            let color = ray_color(ray, &world);
-            write_color(color);
+            let mut pixel_color = Color::zero();
+            for _s in 0..SAMPLES_PER_PIXEL {
+                let u = (i as f64 + rng.gen_range(0.0..=1.0)) / (IMAGE_WIDTH - 1) as f64;
+                let v = (j as f64 + rng.gen_range(0.0..=1.0)) / (IMAGE_HEIGHT - 1) as f64;
+                let r = camera.get_ray(u, v);
+                pixel_color += ray_color(r, &world);
+            }
+            write_color(pixel_color, SAMPLES_PER_PIXEL);
         }
     }
-    eprint!("\rOperation complete.      ")
+    eprintln!("\rOperation complete.      ")
 }
 
 fn main() {

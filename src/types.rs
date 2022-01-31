@@ -1,17 +1,21 @@
 use std::{ops, sync::Arc};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct HitRecord {
     pub p: Point3,
     pub normal: Vec3,
     pub t: f64,
-    pub front_face: bool
+    pub front_face: bool,
 }
 
 impl HitRecord {
     pub fn set_face_normal(&mut self, r: Ray, outward_normal: Vec3) {
         self.front_face = r.direction.dot(outward_normal) < 0.0;
-        self.normal = if self.front_face { outward_normal } else { -outward_normal };
+        self.normal = if self.front_face {
+            outward_normal
+        } else {
+            -outward_normal
+        };
     }
 
     pub fn blank() -> HitRecord {
@@ -19,7 +23,7 @@ impl HitRecord {
             p: Point3::zero(),
             normal: Vec3::zero(),
             t: 0.0,
-            front_face: false
+            front_face: false,
         }
     }
 }
@@ -32,7 +36,7 @@ pub trait Hittable {
 
 pub struct Sphere {
     center: Point3,
-    radius: f64
+    radius: f64,
 }
 
 impl Hittable for Sphere {
@@ -58,7 +62,6 @@ impl Hittable for Sphere {
                     rec.normal = (rec.p - self.center) / self.radius;
                     let outward_normal = (rec.p - self.center) / self.radius;
                     rec.set_face_normal(r, outward_normal);
-
                     true
                 }
             } else {
@@ -67,7 +70,6 @@ impl Hittable for Sphere {
                 rec.normal = (rec.p - self.center) / self.radius;
                 let outward_normal = (rec.p - self.center) / self.radius;
                 rec.set_face_normal(r, outward_normal);
-
                 true
             }
         }
@@ -78,34 +80,36 @@ impl Sphere {
     pub fn new(center: Point3, radius: f64) -> Sphere {
         Sphere {
             center: center,
-            radius: radius
+            radius: radius,
         }
-    } 
+    }
 }
 
 pub struct HittableList {
-    pub objects: Vec<Arc<dyn Hittable>>
+    pub objects: Vec<Arc<dyn Hittable>>,
 }
 
 impl Hittable for HittableList {
     fn hit(&self, r: Ray, t_min: f64, t_max: f64, rec: &mut HitRecord) -> bool {
         let mut temp_rec: HitRecord = HitRecord {
-            p: Point3::new(0.0, 0.0, 0.0),
+            p: Point3::zero(),
             front_face: false,
-            normal: Vec3::new(0.0, 0.0, 0.0),
-            t: 0.0
+            normal: Vec3::zero(),
+            t: 0.0,
         };
         let mut hit_anything = false;
         let mut closest_so_far = t_max;
 
         for boxed_obj in &self.objects {
-            if boxed_obj.as_ref().hit(r, t_min, closest_so_far, &mut temp_rec) {
+            if boxed_obj
+                .as_ref()
+                .hit(r, t_min, closest_so_far, &mut temp_rec)
+            {
                 hit_anything = true;
                 closest_so_far = temp_rec.t;
                 *rec = temp_rec;
             }
         }
-
         hit_anything
     }
 }
@@ -113,7 +117,7 @@ impl Hittable for HittableList {
 impl HittableList {
     pub fn new() -> HittableList {
         HittableList {
-            objects: Vec::new()
+            objects: Vec::new(),
         }
     }
 
@@ -122,7 +126,7 @@ impl HittableList {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Vec3 {
     pub x: f64,
     pub y: f64,
@@ -273,11 +277,7 @@ impl ops::DivAssign<f64> for Vec3 {
 
 impl Vec3 {
     pub fn new(x: f64, y: f64, z: f64) -> Vec3 {
-        Vec3 {
-            x: x,
-            y: y,
-            z: z
-        }
+        Vec3 { x: x, y: y, z: z }
     }
 
     pub fn zero() -> Vec3 {
@@ -293,7 +293,7 @@ impl Vec3 {
     }
 
     pub fn length(&self) -> f64 {
-        self.length_squared().sqrt()  
+        self.length_squared().sqrt()
     }
 
     pub fn dot(&self, other: Vec3) -> f64 {
@@ -319,11 +319,47 @@ pub type Color = Vec3;
 #[derive(Clone, Copy)]
 pub struct Ray {
     pub origin: Point3,
-    pub direction: Vec3
+    pub direction: Vec3,
 }
 
 impl Ray {
     pub fn at(&self, t: f64) -> Point3 {
         self.origin + (self.direction * t)
+    }
+}
+
+pub struct Camera {
+    pub origin: Point3,
+    pub lower_left_corner: Point3,
+    pub horizontal: Vec3,
+    pub vertical: Vec3,
+}
+
+impl Camera {
+    pub fn default_camera() -> Self {
+        let aspect_ratio = 16.0 / 9.0;
+        let viewport_height = 2.0;
+        let viewport_width = aspect_ratio * viewport_height;
+        let focal_length = 1.0;
+
+        let origin = Point3::zero();
+        let horizontal = Vec3::new(viewport_width, 0.0, 0.0);
+        let vertical = Vec3::new(0.0, viewport_height, 0.0);
+        let lower_left_corner = origin - horizontal / 2 - vertical / 2 - Vec3::new(0.0, 0.0, focal_length);
+
+        Camera {
+            origin,
+            lower_left_corner,
+            horizontal,
+            vertical,
+        }
+    }
+
+    pub fn get_ray(&self, u: f64, v: f64) -> Ray {
+        Ray {
+            origin: self.origin,
+            direction: self.lower_left_corner + self.horizontal * u + self.vertical * v
+                - self.origin,
+        }
     }
 }
