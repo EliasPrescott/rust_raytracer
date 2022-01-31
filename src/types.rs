@@ -1,10 +1,11 @@
 use std::{ops, sync::Arc, thread::Thread};
 use rand::{thread_rng, Rng, prelude::ThreadRng};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone)]
 pub struct HitRecord {
     pub p: Point3,
     pub normal: Vec3,
+    pub mat_ptr: Option<Arc<dyn Material>>,
     pub t: f64,
     pub front_face: bool,
 }
@@ -23,6 +24,7 @@ impl HitRecord {
         HitRecord {
             p: Point3::zero(),
             normal: Vec3::zero(),
+            mat_ptr: None,
             t: 0.0,
             front_face: false,
         }
@@ -35,9 +37,68 @@ pub trait Hittable {
     }
 }
 
+pub trait Material {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, rng: &mut ThreadRng) -> bool {
+        false
+    }
+}
+
+pub struct LambertianMaterial {
+    albedo: Color
+}
+
+impl LambertianMaterial {
+    pub fn new(albedo: Color) -> Self {
+        LambertianMaterial {
+            albedo
+        }
+    }
+}
+
+impl Material for LambertianMaterial {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, rng: &mut ThreadRng) -> bool {
+        let scatter_direction = rec.normal + Vec3::random_unit_vector(rng);
+
+        let scatter_direction =
+            if scatter_direction.near_zero() {
+                rec.normal
+            } else {
+                rec.normal + Vec3::random_unit_vector(rng)
+            };
+
+        *scattered = Ray { origin: rec.p, direction: scatter_direction };
+        *attenuation = self.albedo;
+        true
+    }
+}
+
+pub struct MetalMaterial {
+    albedo: Color,
+    fuzz: f64
+}
+
+impl MetalMaterial {
+    pub fn new(albedo: Color, fuzz: f64) -> Self {
+        MetalMaterial {
+            albedo,
+            fuzz
+        }
+    }
+}
+
+impl Material for MetalMaterial {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, rng: &mut ThreadRng) -> bool {
+        let reflected = Vec3::reflect(r_in.direction.unit_vector(), rec.normal);
+        *scattered = Ray { origin: rec.p, direction: reflected + Vec3::random_in_unit_sphere(rng) * self.fuzz };
+        *attenuation = self.albedo;
+        scattered.direction.dot(rec.normal) > 0.0
+    }
+}
+
 pub struct Sphere {
     center: Point3,
     radius: f64,
+    mat_ptr: Arc<dyn Material>
 }
 
 impl Hittable for Sphere {
@@ -63,6 +124,7 @@ impl Hittable for Sphere {
                     rec.normal = (rec.p - self.center) / self.radius;
                     let outward_normal = (rec.p - self.center) / self.radius;
                     rec.set_face_normal(r, outward_normal);
+                    rec.mat_ptr = Some(self.mat_ptr.to_owned());
                     true
                 }
             } else {
@@ -71,6 +133,7 @@ impl Hittable for Sphere {
                 rec.normal = (rec.p - self.center) / self.radius;
                 let outward_normal = (rec.p - self.center) / self.radius;
                 rec.set_face_normal(r, outward_normal);
+                rec.mat_ptr = Some(self.mat_ptr.to_owned());
                 true
             }
         }
@@ -78,10 +141,11 @@ impl Hittable for Sphere {
 }
 
 impl Sphere {
-    pub fn new(center: Point3, radius: f64) -> Sphere {
+    pub fn new(center: Point3, radius: f64, mat_ptr: Arc<dyn Material>) -> Sphere {
         Sphere {
-            center: center,
-            radius: radius,
+            center,
+            radius,
+            mat_ptr 
         }
     }
 }
@@ -92,16 +156,17 @@ pub struct HittableList {
 
 impl Hittable for HittableList {
     fn hit(&self, r: Ray, t_min: f64, t_max: f64, rec: &mut HitRecord) -> bool {
-        let mut temp_rec: HitRecord = HitRecord {
-            p: Point3::zero(),
-            front_face: false,
-            normal: Vec3::zero(),
-            t: 0.0,
-        };
         let mut hit_anything = false;
         let mut closest_so_far = t_max;
 
         for boxed_obj in &self.objects {
+            let mut temp_rec: HitRecord = HitRecord {
+                p: Point3::zero(),
+                front_face: false,
+                mat_ptr: None,
+                normal: Vec3::zero(),
+                t: 0.0,
+            };
             if boxed_obj
                 .as_ref()
                 .hit(r, t_min, closest_so_far, &mut temp_rec)
@@ -142,6 +207,18 @@ impl ops::Add<Vec3> for Vec3 {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
             z: self.z + rhs.z,
+        }
+    }
+}
+
+impl ops::Sub<i32> for Vec3 {
+    type Output = Vec3;
+
+    fn sub(self, a: i32) -> Self::Output {
+        Vec3 {
+            x: self.x - a as f64,
+            y: self.y - a as f64,
+            z: self.z - a as f64,
         }
     }
 }
@@ -307,6 +384,15 @@ impl Vec3 {
             y: self.z * other.x - self.x * other.z,
             z: self.x * other.y - self.y * other.x,
         }
+    }
+
+    pub fn near_zero(&self) -> bool {
+        let s = 1e-8;
+        f64::abs(self.x) < s && f64::abs(self.y) < s && f64::abs(self.z) < s
+    }
+
+    pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
+        v - n * (2 as f64) * v.dot(n)
     }
 
     pub fn unit_vector(&self) -> Vec3 {

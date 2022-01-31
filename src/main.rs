@@ -33,8 +33,15 @@ fn ray_color(r: Ray, world: &dyn Hittable, depth: i64, rng: &mut ThreadRng) -> C
     }
 
     if world.hit(r, 0.0001, INFINITY, &mut rec) {
-        let target = rec.p + rec.normal + Vec3::random_in_hemisphere(rec.normal, rng);
-        ray_color(Ray { origin: rec.p, direction: target - rec.p }, world, depth - 1, rng) * 0.5
+
+        let mut scattered = Ray { origin: Vec3::zero(), direction: Vec3::zero() };
+        let mut attenuation = Color::zero();
+        if let Some(ref mat) = rec.mat_ptr {
+            if mat.scatter(r, &rec, &mut attenuation, &mut scattered, rng) {
+                return attenuation * ray_color(scattered, world, depth - 1, rng)
+            }
+        }
+        Color::zero()
     } else {
         let unit_direction = r.direction.unit_vector();
         let t = 0.5 * (unit_direction.y + 1.0);
@@ -66,9 +73,17 @@ const MAX_DEPTH: i64 = 50;
 fn render_test_image() {
     // World
     let mut world = HittableList::new();
-    world.add(Arc::new(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5)));
-    world.add(Arc::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0)));
 
+    let material_ground = Arc::new(LambertianMaterial::new(Color::new(0.8, 0.8, 0.0)));
+    let material_center = Arc::new(LambertianMaterial::new(Color::new(0.7, 0.3, 0.3)));
+    let material_left = Arc::new(MetalMaterial::new(Color::new(0.8, 0.8, 0.8), 0.3));
+    let material_right = Arc::new(MetalMaterial::new(Color::new(0.8, 0.6, 0.2), 1.0));
+
+    world.add(Arc::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0, material_ground)));
+    world.add(Arc::new(Sphere::new(Point3::new(0.0, 0.0, -1.0), 0.5, material_center)));
+    world.add(Arc::new(Sphere::new(Point3::new(-1.0, 0.0, -1.0), 0.5, material_left)));
+    world.add(Arc::new(Sphere::new(Point3::new(1.0, 0.0, -1.0), 0.5, material_right)));
+    
     // Camera
     let camera = Camera::default_camera();
 
