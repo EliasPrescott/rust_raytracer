@@ -1,7 +1,7 @@
 mod types;
 use std::sync::Arc;
 
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, Rng, prelude::ThreadRng};
 use types::*;
 
 const INFINITY: f64 = f64::INFINITY;
@@ -25,10 +25,16 @@ fn hit_sphere(center: Point3, radius: f64, ray: Ray) -> f64 {
     }
 }
 
-fn ray_color(r: Ray, world: &dyn Hittable) -> Color {
+fn ray_color(r: Ray, world: &dyn Hittable, depth: i64, rng: &mut ThreadRng) -> Color {
     let mut rec = HitRecord::blank();
-    if world.hit(r, 0.0, INFINITY, &mut rec) {
-        (rec.normal + Color::one()) * 0.5
+
+    if depth <= 0 {
+        return Color::zero();
+    }
+
+    if world.hit(r, 0.0001, INFINITY, &mut rec) {
+        let target = rec.p + rec.normal + Vec3::random_in_hemisphere(rec.normal, rng);
+        ray_color(Ray { origin: rec.p, direction: target - rec.p }, world, depth - 1, rng) * 0.5
     } else {
         let unit_direction = r.direction.unit_vector();
         let t = 0.5 * (unit_direction.y + 1.0);
@@ -39,9 +45,9 @@ fn ray_color(r: Ray, world: &dyn Hittable) -> Color {
 fn write_color(color: Color, samples_per_pixel: i64) {
     let scale = 1.0 / samples_per_pixel as f64;
     
-    let r = color.x * scale;
-    let g = color.y * scale;
-    let b = color.z * scale;
+    let r = (color.x * scale).sqrt();
+    let g = (color.y * scale).sqrt();
+    let b = (color.z * scale).sqrt();
 
     print!(
         "{} {} {}\n",
@@ -55,6 +61,7 @@ const ASPECT_RATIO: f64 = 16.0 / 9.0;
 const IMAGE_WIDTH: u16 = 400;
 const IMAGE_HEIGHT: u16 = (IMAGE_WIDTH as f64 / ASPECT_RATIO) as u16;
 const SAMPLES_PER_PIXEL: i64 = 100;
+const MAX_DEPTH: i64 = 50;
 
 fn render_test_image() {
     // World
@@ -77,7 +84,7 @@ fn render_test_image() {
                 let u = (i as f64 + rng.gen_range(0.0..=1.0)) / (IMAGE_WIDTH - 1) as f64;
                 let v = (j as f64 + rng.gen_range(0.0..=1.0)) / (IMAGE_HEIGHT - 1) as f64;
                 let r = camera.get_ray(u, v);
-                pixel_color += ray_color(r, &world);
+                pixel_color += ray_color(r, &world, MAX_DEPTH, &mut rng);
             }
             write_color(pixel_color, SAMPLES_PER_PIXEL);
         }

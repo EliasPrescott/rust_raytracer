@@ -1,4 +1,5 @@
-use std::{ops, sync::Arc};
+use std::{ops, sync::Arc, thread::Thread};
+use rand::{thread_rng, Rng, prelude::ThreadRng};
 
 #[derive(Clone, Copy, Debug)]
 pub struct HitRecord {
@@ -311,8 +312,42 @@ impl Vec3 {
     pub fn unit_vector(&self) -> Vec3 {
         self / self.length()
     }
+
+    pub fn random(min: f64, max: f64, rng: &mut ThreadRng) -> Vec3 {
+        Self::new(
+            rng.gen_range(min..=max),
+            rng.gen_range(min..=max),
+            rng.gen_range(min..=max)
+        )
+    }
+
+    pub fn random_in_unit_sphere(rng: &mut ThreadRng) -> Vec3 {
+        loop {
+            let p = Vec3::random(-1.0, 1.0, rng);
+            if p.length_squared() >= 1.0 {
+                continue;
+            } else {
+                return p;
+            }
+        }
+    }
+
+    pub fn random_unit_vector(rng: &mut ThreadRng) -> Vec3 {
+        Self::random_in_unit_sphere(rng).unit_vector()
+    }
+
+    // An alternate formula for diffuse
+    pub fn random_in_hemisphere(normal: Vec3, rng: &mut ThreadRng) -> Vec3 {
+        let in_unit_sphere = Self::random_in_unit_sphere(rng);
+        if in_unit_sphere.dot(normal) > 0.0 {
+            in_unit_sphere
+        } else {
+            -in_unit_sphere
+        }
+    }
 }
 
+// Using type-aliasing to create these 'child' types that can access Vec3 methods
 pub type Point3 = Vec3;
 pub type Color = Vec3;
 
