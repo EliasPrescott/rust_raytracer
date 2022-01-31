@@ -95,6 +95,35 @@ impl Material for MetalMaterial {
     }
 }
 
+pub struct DielectricMaterial {
+    ir: f64 // Index of refraction
+}
+
+impl DielectricMaterial {
+    pub fn new(ir: f64) -> Self {
+        DielectricMaterial {
+           ir
+        }
+    }
+}
+
+impl Material for DielectricMaterial {
+    fn scatter(&self, r_in: Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, rng: &mut ThreadRng) -> bool {
+        *attenuation = Color::one();
+        let refraction_ratio = 
+            if rec.front_face {
+                1.0 / self.ir
+            } else {
+                self.ir
+            };
+        let unit_direction = r_in.direction.unit_vector();
+        let refracted = Vec3::refract(unit_direction, rec.normal, refraction_ratio);
+
+        *scattered = Ray { origin: rec.p, direction: refracted };
+        true
+    }
+}
+
 pub struct Sphere {
     center: Point3,
     radius: f64,
@@ -393,6 +422,13 @@ impl Vec3 {
 
     pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
         v - n * (2 as f64) * v.dot(n)
+    }
+
+    pub fn refract(uv: Vec3, n: Vec3, etai_over_etat: f64) -> Vec3 {
+        let cos_theta = -uv.dot(n).min(1.0);
+        let r_out_perp = (uv + n * cos_theta) * etai_over_etat;
+        let r_out_parallel = n * (1.0 - r_out_perp.length_squared()).abs().sqrt();
+        r_out_perp + r_out_parallel
     }
 
     pub fn unit_vector(&self) -> Vec3 {

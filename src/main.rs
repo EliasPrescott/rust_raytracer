@@ -75,8 +75,8 @@ fn render_test_image() {
     let mut world = HittableList::new();
 
     let material_ground = Arc::new(LambertianMaterial::new(Color::new(0.8, 0.8, 0.0)));
-    let material_center = Arc::new(LambertianMaterial::new(Color::new(0.7, 0.3, 0.3)));
-    let material_left = Arc::new(MetalMaterial::new(Color::new(0.8, 0.8, 0.8), 0.3));
+    let material_center = Arc::new(DielectricMaterial::new(1.5));
+    let material_left = Arc::new(DielectricMaterial::new(1.5));
     let material_right = Arc::new(MetalMaterial::new(Color::new(0.8, 0.6, 0.2), 1.0));
 
     world.add(Arc::new(Sphere::new(Point3::new(0.0, -100.5, -1.0), 100.0, material_ground)));
